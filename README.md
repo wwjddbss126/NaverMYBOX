@@ -33,6 +33,9 @@ Naver MYBOX Client using Internal API
 | 2. Show File List                          |
 | 3. Download Thumbnail                      |
 | 4. Download File data                      |
+| 5. Search File                             |
+| └ Keyword Search                           |
+| └ Advanced Search                          |
  \                                          /
   ==========================================
                                           \
@@ -42,4 +45,5 @@ Naver MYBOX Client using Internal API
                                              (__)\       )\/\
                                                  ||----w |
                                                  ||     ||
+
 ```
