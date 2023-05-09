@@ -3,12 +3,12 @@ import time
 import re
 import json
 import cowsay
-import datetime
 import pyfiglet
 from playwright.sync_api import (Locator, Page, sync_playwright, Playwright, BrowserType)
 from urllib.parse import urlencode
 from colorama import Fore, Style
 from tabulate import tabulate
+from datetime import datetime
 
 urls = {
     "url_login": 'https://nid.naver.com/nidlogin.login?url=https%3A%2F%2Fmybox.naver.com',
@@ -20,7 +20,8 @@ urls = {
     "url_rkv": "https://api.mybox.naver.com/service/file/count?resourceKey=",
     "url_list": "https://api.mybox.naver.com/service/file/list",
     "url_thumb": "https://thumb2.photo.mybox.naver.com/",
-    "url_data": "https://files.mybox.naver.com/file/download.api?resourceKey="
+    "url_data": "https://files.mybox.naver.com/file/download.api?resourceKey=",
+    "url_search": "https://api.mybox.naver.com/service/file/search"
 }
 
 ck, headers, rk = '', '', ''
@@ -43,13 +44,14 @@ def log_info(message):
 def log_debug(message):
     print(Fore.GREEN + f"[DEBUG] {message}" + Style.RESET_ALL)
 
-def log_warning(message):
-    print(Fore.RED + f"[DEBUG] {message}" + Style.RESET_ALL)
+def log_error(message):
+    print(Fore.RED + f"[ERROR] {message}" + Style.RESET_ALL)
 
 def login(playwright, input_id, input_pw):
 
     chromium = playwright.chromium
     browser = chromium.launch(headless=False)
+    global context
     context = browser.new_context()
 
     page = context.new_page()
@@ -153,8 +155,8 @@ def file_thumb():
     for i, item in enumerate(response):
         row = [i + 1]
         row.extend([item['resourceType'], item['resourcePath'], item['resourceSize'],
-                    datetime.datetime.fromtimestamp(item['createDate'] / 1000),
-                    datetime.datetime.fromtimestamp(item['updateDate'] / 1000)])
+                    datetime.fromtimestamp(item['createDate'] / 1000),
+                    datetime.fromtimestamp(item['updateDate'] / 1000)])
         table_data.append(row)
 
     log_info("[*] File List")
@@ -174,7 +176,6 @@ def down_thumb(table_data, response):
 
         with open(fn, "wb") as f:
             url = urls['url_thumb'] + str(response[row - 1]['resourceNo']) + "?type=m740_390_2"
-            print(url)
             f.write(requests.get(url, headers=headers).content)
 
         log_info("[*] Thumbnail Download Succeed: " + fn)
@@ -189,8 +190,8 @@ def file_data():
     for i, item in enumerate(response):
         row = [i + 1]
         row.extend([item['resourceType'], item['resourcePath'], item['resourceSize'],
-                    datetime.datetime.fromtimestamp(item['createDate'] / 1000),
-                    datetime.datetime.fromtimestamp(item['updateDate'] / 1000)])
+                    datetime.fromtimestamp(item['createDate'] / 1000),
+                    datetime.fromtimestamp(item['updateDate'] / 1000)])
 
         table_data.append(row)
 
@@ -208,17 +209,151 @@ def down_file(table_data, response):
     if 0 < row <= len(table_data):
         fn = response[row - 1]['resourcePath'][1:]
 
-        with open(fn, "wb") as f:
-            url = urls['url_data'] + str(response[row - 1]['resourceKey']) + "&NDriveSvcType=NHN%2FND-WEB%20Ver"
-            f.write(requests.get(url, headers=headers).content)
-            log_info("[*] File Data Download Succeed: " + fn)
+        try:
+            with open(fn, "wb") as f:
+                url = urls['url_data'] + str(response[row - 1]['resourceKey']) + "&NDriveSvcType=NHN%2FND-WEB%20Ver"
+                f.write(requests.get(url, headers=headers).content)
+                log_info("[*] File Data Download Succeed: " + fn)
 
-        print(tabulate([table_data[row - 1]],
-                       headers=["File #.", "Type", "Path", "Size", "Create Date", "Update Date"]))
+            print(tabulate([table_data[row - 1]],
+                           headers=["File #.", "Type", "Path", "Size", "Create Date", "Update Date"]))
+        except:
+            log_error("[*] Invalid Input. You can select only files")
     else:
         log_info("[*] Invalid row number")
 
+def file_search(keyword):
 
+    data = {
+    "NDriveSvcType": "NHN/ND-WEB Ver",
+    "startNum": "0",
+    "pagingRow": "200",
+    "sort": "create",
+    "order": "desc",
+    "keyword": keyword,
+    "hightlightTag": "%3Cem%20style%3D%22color%3A%23157efd%22%3E%24SEARCH%3C%2Fem%3E"
+    }
+    
+    response = json.loads(requests.post(urls['url_search'], headers=headers, data=data).text)
+    
+    for key, value in response['result'].items():
+        if key != "list":
+            print(f"{key}: {value}")
+        else:
+            print(tabulate([item.values() for item in value], headers=value[0].keys()))
+        
+def file_search_adv(keyword):
+
+    data = {
+    "NDriveSvcType": "NHN/ND-WEB Ver",
+    "startNum": "0",
+    "pagingRow": "200",
+    "sort": "create",
+    "order": "desc",
+    "searchArea": "all",
+    "hightlightTag": "%3Cem%20style%3D%22color%3A%23157efd%22%3E%24SEARCH%3C%2Fem%3E"
+    }
+    
+    keys = [
+    "keyword",
+    "fileOption",
+    "startDate",
+    "endDate",
+    "minSize",
+    "maxSize",
+    "resourceKey",
+    ]
+        
+    for i, key in enumerate(keys):
+        if len(str(keyword[i])) != 0:
+            data[key] = keyword[i]
+            
+    response = json.loads(requests.post(urls['url_search'], headers=headers, data=data).text)
+        
+    for key, value in response['result'].items():
+        if key != "list":
+            print(f"{key}: {value}")
+        elif len(value) > 0:
+            print(tabulate([item.values() for item in value], headers=value[0].keys()))
+        else:
+            log_info("No search results found")
+
+def file_search_adv_area():
+    table_data = []
+    
+    data = json.loads(requests.get(urls['url_rk'], headers=headers).text)
+    for key, value in data['result'].items():
+        if key == "resourceKey":
+            rk = value
+
+    data = {
+    "NDriveSvcType": "NHN/ND-WEB Ver",
+    "startNum": "0",
+    "pagingRow": "200",
+    "sort": "create",
+    "order": "desc",
+    "resourceOption": "folder",
+    "resourceKey": rk
+    }
+    
+    response = json.loads(requests.post(urls['url_list'], headers=headers, data=data).text)['result']['list']
+    for i, item in enumerate(response):
+        row = [i + 1]
+        row.extend([item['resourceKey'], item['resourcePath'], item['resourceType']])
+        table_data.append(row)
+    print(tabulate(table_data, headers=["File #.", "Key", "Path", "Type"]))
+
+    row = input()
+    if len(row) != 0:
+        try:
+            if 0 < int(row) <= len(table_data):
+                return response[int(row) - 1]['resourceKey']
+        except:
+            log_error("Invalid Input")
+    else:
+        return "root"
+        
+def file_search_adv_options():
+
+    keyword = []
+    log_info("[*] Advanced Search: Enter Options to search")                
+    log_info("[*] If you don't want to set, leave it blank")
+                            
+    log_info("* Enter Keyword to search")
+    keyword.append(input())
+    log_info("* Enter a File Type: doc, image, video, audio, zip")
+    keyword.append(input())
+    log_info("* Enter the Start Date (YYYY-MM-DD)")
+    tmp = input()
+    if len(tmp) != 0:
+        datetime.strptime(tmp, '%Y-%m-%d')
+        keyword.append(tmp + "T00")
+    else:
+        keyword.append("")
+    log_info("* Enter the End Date (YYYY-MM-DD)")
+    tmp = input()
+    if len(tmp) != 0:
+        datetime.strptime(tmp, '%Y-%m-%d')
+        keyword.append(tmp + "T00")
+    else:
+        keyword.append("")
+    log_info("* Enter the Minimum File Size (unit: bytes)")
+    tmp = input()
+    if len(tmp) != 0:
+        keyword.append(int(tmp))
+    else:
+        keyword.append("")
+    log_info("* Enter the Maximum File Size (unit: bytes)")
+    tmp = input()
+    if len(tmp) != 0:
+        keyword.append(int(tmp))
+    else:
+        keyword.append("")
+    log_info("* Select the Search Area")
+    keyword.append(file_search_adv_area())                
+    log_debug("[*] Searching File...")
+    file_search_adv(keyword)
+        
 if __name__ == "__main__":
     print(pyfiglet.figlet_format("NAVER MYBOX", font="isometric1"))
 
@@ -247,6 +382,9 @@ if __name__ == "__main__":
             2. Show File List
             3. Download Thumbnail
             4. Download File data
+            5. Search File
+                └ Keyword Search
+                └ Advanced Search
             """)
         num = int(input())
         if num == 0:
@@ -264,3 +402,21 @@ if __name__ == "__main__":
         if num == 4:
             log_debug("[*] Collecting File Data...")
             file_data()
+        if num == 5:
+            cowsay.cow(
+            """
+            0. Exit
+            1. Keyword Search
+            2. Advanced Search
+            """)
+            searchnum = int(input())
+            if searchnum == 0:
+                log_debug("[*] Exit...")
+                pass
+            if searchnum == 1:
+                log_info("[*] Keyword Search: Enter Keyword to search")
+                keyword = input()
+                log_debug("[*] Searching File...")
+                file_search(keyword)
+            if searchnum == 2:
+                file_search_adv_options()
