@@ -1,4 +1,4 @@
-# NaverMYBOX
+# NaverMYBOX Internal API
 Naver MYBOX Client using Internal API
 ```
       ___           ___           ___           ___           ___
